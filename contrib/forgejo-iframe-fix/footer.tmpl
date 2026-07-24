@@ -1,15 +1,17 @@
-<!-- forgepeek:iframe-ref-fix v1
-     Workaround for a Forgejo bug (present through v16.0.1, unfixed on main
-     as of 2026-07-24): binary files rendered by an iframe-mode external
-     renderer get an iframe src with an EMPTY ref segment
-     ("/owner/repo/render//path" instead of "/owner/repo/render/branch/main/path"),
-     which 404s and shows a gray broken box.
-     Cause: routers/web/repo/view.go builds the markup metas without
-     "BranchNameSubURL" on the binary-file path; renderIFrame() in
-     modules/markup/renderer.go reads that meta for the URL.
-     This script rebuilds the correct URL from the file view's raw/download
-     link (which is generated correctly) and re-runs the iframe height
-     handshake. Safe no-op on healthy pages. Remove once fixed upstream. -->
+<!-- forgepeek:iframe-ref-fix v2
+     Works around two Forgejo bugs (present through v16.0.1, unfixed on
+     main as of 2026-07-24) affecting BINARY files rendered by iframe-mode
+     external renderers:
+     1. Empty ref segment in the iframe src ("/owner/repo/render//path"
+        404s): routers/web/repo/view.go builds markup metas without
+        "BranchNameSubURL" on the binary-file path. Fixed here by
+        rebuilding the URL from the raw/download link.
+     2. Corrupted input: routers/web/repo/render.go pipes the blob through
+        charset.ToUTF8WithFallbackReader before the renderer, mangling
+        binary bytes. Fixed here by fetching the pristine /raw/ bytes and
+        postMessage-ing them into the viewer, which re-renders when its
+        embedded copy failed or differs (see forgepeek's viewer.js).
+     Safe no-op on healthy pages / text files. Remove once fixed upstream. -->
 <script>
 (function () {
   function fix() {
@@ -17,27 +19,46 @@
     if (!f) return;
     var src;
     try { src = new URL(f.getAttribute('src'), window.location.href); } catch (e) { return; }
-    var i = src.pathname.indexOf('/render//');
-    if (i === -1) return;
-    var prefix = src.pathname.slice(0, i);
     var dl = document.querySelector('a[download]');
     if (!dl) return;
     var raw = new URL(dl.getAttribute('href'), window.location.href).pathname;
-    var rawPrefix = prefix + '/raw/';
-    if (raw.indexOf(rawPrefix) !== 0) return;
-    f.addEventListener('load', function () {
-      var onMsg = function (ev) {
-        if (ev.source !== f.contentWindow) return;
-        var h = Number(ev.data && ev.data.frameHeight);
-        if (!h) return;
-        f.height = h;
-        f.style.overflow = 'hidden';
-        window.removeEventListener('message', onMsg);
-      };
-      window.addEventListener('message', onMsg);
-      f.contentWindow.postMessage({requestOffsetHeight: true}, '*');
-    });
-    f.src = prefix + '/render/' + raw.slice(rawPrefix.length);
+
+    var postRaw = function () {
+      fetch(raw).then(function (r) { return r.ok ? r.arrayBuffer() : null; })
+        .then(function (buf) {
+          if (buf && f.contentWindow) {
+            f.contentWindow.postMessage({forgepeekRaw: buf}, '*', [buf]);
+          }
+        }).catch(function () {});
+    };
+
+    var i = src.pathname.indexOf('/render//');
+    if (i !== -1) {
+      // Bug 1: rebuild the URL (prefix + '/render/' + <ref/path from the
+      // correctly-generated raw link>), then redo the height handshake.
+      var prefix = src.pathname.slice(0, i);
+      var rawPrefix = prefix + '/raw/';
+      if (raw.indexOf(rawPrefix) !== 0) return;
+      f.addEventListener('load', function () {
+        var onMsg = function (ev) {
+          if (ev.source !== f.contentWindow) return;
+          var h = Number(ev.data && ev.data.frameHeight);
+          if (!h) return;
+          f.height = h;
+          f.style.overflow = 'hidden';
+          window.removeEventListener('message', onMsg);
+        };
+        window.addEventListener('message', onMsg);
+        f.contentWindow.postMessage({requestOffsetHeight: true}, '*');
+        postRaw();
+      });
+      f.src = prefix + '/render/' + raw.slice(rawPrefix.length);
+    } else {
+      // Bug 2 alone (URL already correct): deliver pristine bytes whether
+      // the iframe has loaded yet or not; the viewer ignores duplicates.
+      f.addEventListener('load', postRaw);
+      postRaw();
+    }
   }
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', fix);

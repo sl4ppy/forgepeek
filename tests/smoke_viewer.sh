@@ -53,6 +53,34 @@ test_corrupt_stl_shows_client_error() {
     assert_contains "$OUT" "could not display" "friendly error text"
 }
 
+test_postmessage_repair_recovers_corrupt_embed() {
+    # Forgejo's standalone render route corrupts binary input (UTF-8
+    # conversion). The footer shim posts pristine /raw/ bytes into the
+    # viewer, which must recover. Simulate: render a page whose embedded
+    # model is mangled, then post the real bytes via postMessage (in a
+    # top-level page window.parent === window, so the source check passes).
+    python3 - "$FIXTURES/cube-binary.stl" "$WORK/mangled.stl" <<'EOF'
+import sys
+data = open(sys.argv[1], 'rb').read()
+# what ToUTF8WithFallbackReader does to binary: invalid sequences -> U+FFFD
+open(sys.argv[2], 'wb').write(data.decode('latin-1').encode('utf-8'))
+EOF
+    "$FORGEPEEK" render stl <"$WORK/mangled.stl" >"$WORK/page.html" 2>/dev/null
+    b64=$(base64 <"$FIXTURES/cube-binary.stl" | tr -d '\n')
+    cat >>"$WORK/page.html" <<EOF
+<script>
+var bin = atob("$b64");
+var bytes = new Uint8Array(bin.length);
+for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+window.postMessage({forgepeekRaw: bytes.buffer}, '*');
+</script>
+EOF
+    "$BROWSER" --headless=new --disable-gpu --no-sandbox \
+        --use-gl=swiftshader --enable-unsafe-swiftshader \
+        --virtual-time-budget=5000 --dump-dom "$WORK/page.html" >"$OUT" 2>/dev/null
+    assert_contains "$OUT" "12 triangles" "viewer recovered via posted pristine bytes"
+}
+
 test_too_large_shows_client_notice() {
     "$FORGEPEEK" render stl <"$FIXTURES/cube-binary.stl" >"$WORK/big.html" 2>/dev/null
     FORGEPEEK_MAX_BYTES_3D=100 "$FORGEPEEK" render stl \

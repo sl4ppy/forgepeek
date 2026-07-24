@@ -115,9 +115,27 @@ function fitCameraTo(object, camera, controls) {
   return { bounds, center, maxDim };
 }
 
+const state = { root: null, opts: null, dispose: null, byteLength: -1, failed: false };
+
 export function init(opts) {
   const root = document.getElementById(opts.rootId || 'forgepeek');
   if (!root) return;
+  state.root = root;
+  state.opts = opts;
+
+  // The parent page (forgepeek's footer shim) may post the file's pristine
+  // bytes: Forgejo's standalone render route pipes binary input through a
+  // UTF-8 converter, corrupting it, so the shim fetches the raw file and
+  // hands it over. Re-render only when the embedded copy failed or the
+  // sizes disagree (i.e. the embedded bytes really were mangled).
+  window.addEventListener('message', (ev) => {
+    if (ev.source !== window.parent) return;
+    const raw = ev.data && ev.data.forgepeekRaw;
+    if (!(raw instanceof ArrayBuffer)) return;
+    if (state.opts.tooLarge) return;
+    if (!state.failed && raw.byteLength === state.byteLength) return;
+    boot(raw);
+  });
 
   if (opts.tooLarge) {
     box(root, 'notice',
@@ -128,17 +146,37 @@ export function init(opts) {
     return;
   }
 
+  let buffer;
+  try {
+    buffer = decodeBase64(opts.data || '');
+  } catch (err) {
+    buffer = new ArrayBuffer(0);
+  }
+  boot(buffer);
+}
+
+function boot(buffer) {
+  const root = state.root;
+  const opts = state.opts;
+  if (state.dispose) {
+    state.dispose();
+    state.dispose = null;
+  }
+  state.byteLength = buffer.byteLength;
+
   let parsed;
   try {
-    parsed = parseModel(opts.format, decodeBase64(opts.data || ''));
+    parsed = parseModel(opts.format, buffer);
     if (!parsed.counts.vertices) throw new Error('no geometry found in file');
   } catch (err) {
+    state.failed = true;
     box(root, 'error',
       'forgepeek: could not display this ' + String(opts.format || '').toUpperCase() + ' file',
       'The model failed to parse: ' + (err && err.message ? err.message : err));
     signalReady({ error: true });
     return;
   }
+  state.failed = false;
 
   const theme = isDark() ? DARK : LIGHT;
   const scene = new Scene();
@@ -219,6 +257,14 @@ export function init(opts) {
     controls.update();
     renderer.render(scene, camera);
   });
+
+  state.dispose = () => {
+    renderer.setAnimationLoop(null);
+    window.removeEventListener('resize', resize);
+    controls.dispose();
+    renderer.dispose();
+    root.innerHTML = '';
+  };
 
   signalReady({ triangles: parsed.counts.triangles, vertices: parsed.counts.vertices });
 }

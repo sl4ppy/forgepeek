@@ -1,18 +1,26 @@
-# Forgejo iframe render URL fix
+# Forgejo iframe render fixes (binary files)
 
-Works around a Forgejo bug (present through v16.0.1, unfixed upstream as of
-2026-07-24) where **binary** files rendered by an iframe-mode external
-renderer — forgepeek's `.stl`/`.fbx`, or any other — get a broken iframe URL
-with an empty ref segment (`/owner/repo/render//path` → 404 → gray broken
-box). Text files are unaffected because Forgejo's text path populates the
-`BranchNameSubURL` meta that the iframe URL is built from; the binary path
-(`routers/web/repo/view.go`, second `markupRender` call site) does not.
+Works around **two** Forgejo bugs (present through v16.0.1, unfixed upstream
+as of 2026-07-24) that break iframe-mode external renderers — forgepeek's
+`.stl`/`.fbx`, or any other — for **binary** files. Text files are unaffected
+by both.
+
+1. **Broken iframe URL**: the src gets an empty ref segment
+   (`/owner/repo/render//path` → 404 → gray broken box). The binary path in
+   `routers/web/repo/view.go` (second `markupRender` call site) omits the
+   `BranchNameSubURL` meta the URL is built from.
+2. **Corrupted renderer input**: `routers/web/repo/render.go` pipes the blob
+   through `charset.ToUTF8WithFallbackReader` before the external renderer,
+   mangling binary bytes — models fail to parse even though the file is fine.
 
 `footer.tmpl` is a [custom template](https://forgejo.org/docs/latest/admin/customization/)
-injected before `</body>` on every page. When it finds an `iframe.external-render`
-whose src contains `/render//`, it rebuilds the correct URL from the file
-view's raw/download link (which Forgejo generates correctly) and re-runs the
-iframe height handshake. On healthy pages it does nothing.
+injected before `</body>` on every page. It rebuilds a broken iframe URL from
+the file view's raw/download link (which Forgejo generates correctly), re-runs
+the iframe height handshake, and posts the pristine `/raw/` bytes into the
+viewer via `postMessage` — forgepeek's viewer re-renders with them when its
+embedded copy failed to parse or differs in size. On healthy pages it does
+nothing. (The byte hand-off requires forgepeek's viewer; for other people's
+iframe renderers only the URL fix applies.)
 
 ## Install (Docker, one-time — survives container recreation)
 
