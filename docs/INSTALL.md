@@ -153,6 +153,9 @@ services:
       args:
         FORGEJO_IMAGE: codeberg.org/forgejo/forgejo:16
     image: forgejo-forgepeek:16
+    pull_policy: build   # local build tag — stops 'compose pull' from
+                         # failing on a registry lookup (stack managers
+                         # like Komodo run pull before every deploy)
     environment:
       - USER_UID=1000
       - USER_GID=1000
