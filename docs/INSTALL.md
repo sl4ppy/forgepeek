@@ -31,7 +31,7 @@ Assumptions: the official Forgejo image, a volume or bind mount at `/data` (the 
 ### 1. Install the files
 
 ```sh
-git clone https://example.com/forgepeek/forgepeek.git
+git clone https://github.com/sl4ppy/forgepeek.git
 cd forgepeek
 ./install.sh docker --container forgejo
 ```
@@ -95,7 +95,7 @@ Verification is below, after the bare-metal section.
 ## Layout B: bare metal
 
 ```sh
-git clone https://example.com/forgepeek/forgepeek.git
+git clone https://github.com/sl4ppy/forgepeek.git
 cd forgepeek
 sudo ./install.sh baremetal
 ```

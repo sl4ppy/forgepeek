@@ -26,7 +26,7 @@ The 3D handlers need no conversion tools at all — a bonus if you can't (or won
 For a standard `docker compose` Forgejo with a `/data` volume:
 
 ```sh
-git clone https://example.com/forgepeek/forgepeek.git
+git clone https://github.com/sl4ppy/forgepeek.git
 cd forgepeek
 ./install.sh docker --container forgejo
 ```
@@ -56,7 +56,7 @@ Full walk-through, verification steps and troubleshooting: **[docs/INSTALL.md](d
 
 ```
 Forgejo file view
-   └─ [markup.forgepeek-psd] in app.ini
+   └─ [markup.forgepeek_psd] in app.ini
         └─ pipes file bytes to:  forgepeek render psd
              └─ dispatcher picks handlers/psd (by its header metadata)
                   └─ ImageMagick → PNG → <img src="data:image/png;base64,…">
