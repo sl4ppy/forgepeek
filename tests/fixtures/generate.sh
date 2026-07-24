@@ -13,6 +13,11 @@ $IM -size 64x64 gradient:red-yellow \( -size 32x32 xc:blue \) sample-2layer.psd
 # CMYK PSD — exercises the -colorspace sRGB path.
 $IM -size 64x64 gradient:green-white -colorspace CMYK sample-cmyk.psd
 
+# Blank (fully transparent) composite frame with real layer content —
+# the "saved without Maximize Compatibility" case where frame [0]
+# converts fine but to an empty canvas.
+$IM -size 64x64 xc:none \( -size 32x32 xc:red \) blank-composite.psd
+
 # Large-canvas PSB (still a small file) — exercises the psb: delegate.
 $IM -size 128x128 plasma:fractal -depth 8 sample.psb
 

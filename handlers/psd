@@ -39,9 +39,31 @@ fi
 
 resize="${FORGEPEEK_MAX_EDGE}x${FORGEPEEK_MAX_EDGE}>"
 
-# 1st attempt: composite frame. 2nd attempt: flatten all layers.
-if ! fp_run_timeout "$log" "$im" "$fmt:$in[0]" -colorspace sRGB \
-        -resize "$resize" "png:$out" || [ ! -s "$out" ]; then
+# fp_psd_blank FILE — true if the rendered image is effectively empty
+# (flat color, or fully transparent). mean.a prints "nan" for images
+# without an alpha channel; treat that as opaque.
+fp_psd_blank() {
+    "$im" "png:$1" -format '%[fx:standard_deviation] %[fx:mean.a]' info: 2>>"$log" | \
+        awk '{ b = ($1 + 0 < 0.0005)
+               if ($2 !~ /nan/ && $2 + 0 < 0.01) b = 1
+               exit !b }
+             END { if (NR == 0) exit 1 }'
+}
+
+# 1st attempt: composite frame. Fall back to flattening the layer stack
+# when that fails outright — or when it "succeeds" with a blank canvas:
+# files saved without "Maximize Compatibility" sometimes carry a
+# structurally valid but EMPTY composite frame.
+if fp_run_timeout "$log" "$im" "$fmt:$in[0]" -colorspace sRGB \
+        -resize "$resize" "png:$out" && [ -s "$out" ]; then
+    if fp_psd_blank "$out"; then
+        if fp_run_timeout "$log" "$im" "$fmt:$in" -flatten -colorspace sRGB \
+                -resize "$resize" "png:$out.flat" && [ -s "$out.flat" ] \
+                && ! fp_psd_blank "$out.flat"; then
+            mv "$out.flat" "$out"
+        fi
+    fi
+else
     : >"$out"
     if ! fp_run_timeout "$log" "$im" "$fmt:$in" -flatten -colorspace sRGB \
             -resize "$resize" "png:$out" || [ ! -s "$out" ]; then
