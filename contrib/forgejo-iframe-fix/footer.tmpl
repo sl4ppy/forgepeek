@@ -1,4 +1,4 @@
-<!-- forgepeek:iframe-ref-fix v2
+<!-- forgepeek:iframe-ref-fix v3
      Works around two Forgejo bugs (present through v16.0.1, unfixed on
      main as of 2026-07-24) affecting BINARY files rendered by iframe-mode
      external renderers:
@@ -36,23 +36,38 @@
     if (i !== -1) {
       // Bug 1: rebuild the URL (prefix + '/render/' + <ref/path from the
       // correctly-generated raw link>), then redo the height handshake.
+      // REPLACE the iframe node rather than mutating src: an src
+      // assignment made while the initial (broken) navigation is still in
+      // flight is not reliably honored by Chrome.
       var prefix = src.pathname.slice(0, i);
       var rawPrefix = prefix + '/raw/';
       if (raw.indexOf(rawPrefix) !== 0) return;
-      f.addEventListener('load', function () {
+      var nf = document.createElement('iframe');
+      nf.className = f.className;
+      nf.width = f.getAttribute('width') || '100%';
+      nf.height = f.getAttribute('height') || '300';
+      nf.setAttribute('frameborder', f.getAttribute('frameborder') || '0');
+      nf.setAttribute('sandbox', f.getAttribute('sandbox') || 'allow-scripts');
+      nf.addEventListener('load', function () {
         var onMsg = function (ev) {
-          if (ev.source !== f.contentWindow) return;
+          if (ev.source !== nf.contentWindow) return;
           var h = Number(ev.data && ev.data.frameHeight);
           if (!h) return;
-          f.height = h;
-          f.style.overflow = 'hidden';
+          nf.height = h;
+          nf.style.overflow = 'hidden';
           window.removeEventListener('message', onMsg);
         };
         window.addEventListener('message', onMsg);
-        f.contentWindow.postMessage({requestOffsetHeight: true}, '*');
-        postRaw();
+        nf.contentWindow.postMessage({requestOffsetHeight: true}, '*');
+        fetch(raw).then(function (r) { return r.ok ? r.arrayBuffer() : null; })
+          .then(function (buf) {
+            if (buf && nf.contentWindow) {
+              nf.contentWindow.postMessage({forgepeekRaw: buf}, '*', [buf]);
+            }
+          }).catch(function () {});
       });
-      f.src = prefix + '/render/' + raw.slice(rawPrefix.length);
+      nf.src = prefix + '/render/' + raw.slice(rawPrefix.length);
+      f.parentNode.replaceChild(nf, f);
     } else {
       // Bug 2 alone (URL already correct): deliver pristine bytes whether
       // the iframe has loaded yet or not; the viewer ignores duplicates.
