@@ -12,7 +12,7 @@ forgepeek is a collection of [external renderers](https://forgejo.org/docs/lates
 
 | Format | Extensions | Server dependencies | Notes |
 |---|---|---|---|
-| Photoshop | `.psd`, `.psb` | ImageMagick | Renders the embedded composite; falls back to flattening layers for files saved without "Maximize Compatibility". CMYK converted to sRGB. |
+| Photoshop | `.psd`, `.psb` | ImageMagick | Renders the embedded composite; falls back to flattening the layer stack when the composite is missing **or blank** (both flavors of "saved without Maximize Compatibility"). CMYK converted to sRGB. |
 | PostScript | `.eps`, `.ai` | Ghostscript | Runs with `-dSAFER`. Modern (PDF-compatible) and classic `.ai` both work. First page only. |
 | STL | `.stl` | **none** | Interactive 3D viewer (three.js, self-contained — works on air-gapped instances). Binary and ASCII. |
 | FBX | `.fbx` | **none** | Same viewer. Geometry + materials; textures are best-effort — external texture references can't load inside the sandboxed iframe, so affected meshes fall back to a neutral material. |
@@ -64,7 +64,23 @@ Forgejo file view
 
 Static formats render as sanitized HTML with a data-URI image. 3D formats use Forgejo's `iframe` render mode: the handler emits a complete, self-contained HTML page (viewer JS inlined, model embedded as base64) that runs in a sandboxed iframe — no CDN, no network fetches, ever.
 
-`forgepeek config` regenerates the `app.ini` stanzas from the installed handlers, so adding a format is: drop in one handler file, re-run `forgepeek config`, append, restart.
+`forgepeek config` regenerates the `app.ini` stanzas from the installed handlers, so adding a format is: drop in one handler file, re-run `forgepeek config`, append, restart. (`--format env` emits the same config as `FORGEJO__*` environment variables for fully declarative stack deployments.)
+
+## Recommended companion: the page-enhancement template
+
+[`contrib/forgejo-iframe-fix`](contrib/forgejo-iframe-fix/) is a single custom
+`footer.tmpl` for your Forgejo that does two jobs:
+
+- **Zoom/pan controls on image previews** — wheel-zoom to 32× at the cursor,
+  drag-pan, double-click toggle, and a full-height stage. (Sanitized renderer
+  output can't carry JavaScript, so this has to live in a page template.)
+- **Workarounds for two Forgejo bugs** (present through v16.0.1) that break
+  iframe-mode previews of *binary* files: a malformed iframe URL, and binary
+  input corrupted by charset conversion. Without it, `.stl`/`.fbx` previews
+  on affected versions show a gray broken box.
+
+One file on your data volume, survives upgrades, safe no-op where nothing
+needs fixing. Install instructions in its README.
 
 - Adding your own format: [docs/ADDING-HANDLERS.md](docs/ADDING-HANDLERS.md)
 - Planned formats: [docs/ROADMAP.md](docs/ROADMAP.md)
