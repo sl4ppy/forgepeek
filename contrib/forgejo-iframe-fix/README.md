@@ -1,4 +1,12 @@
-# Forgejo iframe render fixes (binary files)
+# Forgejo page enhancements & iframe render fixes
+
+Besides the bug workarounds below, `footer.tmpl` adds **zoom/pan controls to
+forgepeek's image previews** (`.psd`/`.eps`/`.ai`): mouse-wheel zoom at the
+cursor (up to 32×), drag to pan, double-click to toggle, and a +/−/reset
+overlay. Sanitized-mode renderer output cannot carry JavaScript — Forgejo
+strips it — so the interaction has to live in the parent page; without this
+template the previews are simply static images.
+
 
 Works around **two** Forgejo bugs (present through v16.0.1, unfixed upstream
 as of 2026-07-24) that break iframe-mode external renderers — forgepeek's

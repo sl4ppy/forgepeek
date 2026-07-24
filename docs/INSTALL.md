@@ -202,6 +202,14 @@ docker exec -i forgejo /data/forgepeek/forgepeek render psd \
 | File just shows a "View raw" link, no preview attempt | File exceeds **Forgejo's** `[ui] MAX_DISPLAY_FILE_SIZE` (8 MiB default) — checked before any renderer runs | Raise it, e.g. `FORGEJO__ui__MAX_DISPLAY_FILE_SIZE=67108864` (64 MiB); forgepeek's own `FORGEPEEK_MAX_BYTES*` caps still apply after |
 | A specific renderer stops matching after a restart, works after another | Two `[markup.*]` sections claim the same extension (e.g. a leftover experiment); registration order is unstable | `grep "\[markup" app.ini` and delete the stale section |
 
+## Optional: zoom controls for image previews
+
+Install [contrib/forgejo-iframe-fix](../contrib/forgejo-iframe-fix/) (the
+same custom `footer.tmpl` that fixes the iframe bugs) and the `.psd`/`.eps`/`.ai`
+previews gain wheel-zoom at the cursor, drag-pan, double-click toggle, and a
++/−/reset overlay. Sanitized renderer output can't carry JavaScript, so this
+enhancement has to live in a page template; previews stay static without it.
+
 ## Tuning
 
 Environment variables read by the handlers (set them in the Forgejo container/service environment):

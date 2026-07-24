@@ -81,6 +81,33 @@ EOF
     assert_contains "$OUT" "12 triangles" "viewer recovered via posted pristine bytes"
 }
 
+test_footer_shim_adds_zoom_controls_to_image_previews() {
+    # The contrib footer shim enhances sanitized-mode image previews with
+    # zoom/pan. Compose a page from real psd handler output plus the shim
+    # script (as Forgejo would inject it), fire a wheel event, and check
+    # the controls exist and the transform applied.
+    {
+        printf '<div class="file-view markup forgepeek_psd">\n'
+        "$FORGEPEEK" render psd <"$FIXTURES/sample-2layer.psd" 2>/dev/null
+        printf '</div>\n'
+        sed -n '/<script>/,/<\/script>/p' "$ROOT/contrib/forgejo-iframe-fix/footer.tmpl"
+        cat <<'EOF'
+<script>
+window.addEventListener('load', function () {
+  var box = document.querySelector('.forgepeek-image');
+  box.dispatchEvent(new WheelEvent('wheel', {deltaY: -120, clientX: 10, clientY: 10, bubbles: true, cancelable: true}));
+});
+</script>
+EOF
+    } >"$WORK/zoom.html"
+    "$BROWSER" --headless=new --disable-gpu --no-sandbox \
+        --virtual-time-budget=5000 --dump-dom "$WORK/zoom.html" >"$OUT" 2>/dev/null
+    assert_contains "$OUT" 'data-fp-zoom' "zoom enhancement attached"
+    assert_contains "$OUT" 'title="Zoom in"' "zoom-in button present"
+    assert_contains "$OUT" 'scale(1.2)' "wheel event zoomed the image"
+    assert_contains "$OUT" '>120%<' "zoom label updated"
+}
+
 test_too_large_shows_client_notice() {
     "$FORGEPEEK" render stl <"$FIXTURES/cube-binary.stl" >"$WORK/big.html" 2>/dev/null
     FORGEPEEK_MAX_BYTES_3D=100 "$FORGEPEEK" render stl \
