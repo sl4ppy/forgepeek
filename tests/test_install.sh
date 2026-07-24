@@ -14,7 +14,7 @@ test_baremetal_install() {
     [ -x "$WORK/lib/forgepeek/forgepeek" ] || fail "dispatcher not installed"
     [ -f "$WORK/lib/forgepeek/lib/viewer.js" ] || fail "viewer bundle not installed"
     [ -L "$WORK/bin/forgepeek" ] || fail "bin symlink missing"
-    assert_contains "$OUT" "\[markup.forgepeek-psd\]" "snippet printed"
+    assert_contains "$OUT" "\[markup.forgepeek_psd\]" "snippet printed"
     assert_contains "$OUT" "RENDER_COMMAND = \"$WORK/bin/forgepeek render psd\"" \
         "snippet uses installed path"
 }

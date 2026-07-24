@@ -1,15 +1,27 @@
 # forgepeek config generator — sourced by the dispatcher for 'forgepeek
-# config'. Single source of truth for the app.ini snippets quoted in the
-# docs and printed by install.sh. Reads each handler's machine-readable
-# header (extensions, mode) and emits one [markup.*] stanza per extension —
+# config'. Single source of truth for the Forgejo configuration printed by
+# install.sh and quoted in the docs. Reads each handler's machine-readable
+# header (extensions, mode) and emits one markup section per extension —
 # one per extension because Forgejo passes only file content on stdin, so
 # the extension must be baked into RENDER_COMMAND.
 #
-# Sanitized handlers additionally get [markup.sanitizer.<name>.*] rules:
+# Two output formats:
+#   --format ini   (default) [markup.*] stanzas to append to app.ini
+#   --format env   FORGEJO__* environment lines for a compose file — the
+#                  Forgejo image's environment-to-ini writes them into
+#                  app.ini on every container start, which makes fully
+#                  declarative deployments (Komodo, Portainer, plain
+#                  compose) possible with no shell access at all.
+#
+# Sanitized handlers additionally get markup.sanitizer.<name>.* rules:
 # the elements/attributes the shared HTML helpers emit, value-constrained
 # by REGEXP, plus ALLOW_DATA_URI_IMAGES (without which previews are
 # silently blank). iframe handlers get RENDER_CONTENT_MODE = iframe and no
 # sanitizer rules (the sanitizer does not apply to iframe content).
+#
+# Section names use underscores only: environment-to-ini section names are
+# limited to [A-Z0-9_] plus _0X2E_ escapes for dots, so dashes would need
+# extra escaping in env format.
 #
 # NOTE (ini syntax): regexp values below deliberately avoid the sequences
 # " #" and " ;" — go-ini would treat them as inline comment starts.
@@ -17,36 +29,74 @@
 FP_STYLE_RE='^[#%a-zA-Z0-9:;,. -]+$'
 FP_CLASS_RE='^forgepeek[a-z -]*$'
 
+# fp_cfg_section FULL_SECTION_NAME (e.g. markup.forgepeek_psd)
+fp_cfg_section() {
+    FP_CUR_SECTION=$1
+    if [ "$FP_FMT" = ini ]; then
+        printf '\n[%s]\n' "$1"
+    else
+        printf '\n      # [%s]\n' "$1"
+    fi
+}
+
+# fp_cfg_kv KEY RAW_VALUE — emit under the current section.
+fp_cfg_kv() {
+    if [ "$FP_FMT" = ini ]; then
+        case $2 in
+            *' '*) printf '%s = "%s"\n' "$1" "$2" ;;
+            *)     printf '%s = %s\n' "$1" "$2" ;;
+        esac
+    else
+        # FORGEJO__<SECTION upper, '.' → _0X2E_>__<KEY>=<value>.
+        # '$' doubled: compose interpolates $ in 'environment:' values.
+        _fp_env_sec=$(printf '%s' "$FP_CUR_SECTION" | tr 'a-z' 'A-Z' | sed 's/\./_0X2E_/g')
+        _fp_env_val=$(printf '%s' "$2" | sed 's/\$/$$/g')
+        printf "      - 'FORGEJO__%s__%s=%s'\n" "$_fp_env_sec" "$1" "$_fp_env_val"
+    fi
+}
+
 fp_emit_stanza() { # NAME EXT CMDPATH MODE
-    printf '[markup.%s]\n' "$1"
-    printf 'ENABLED = true\n'
-    printf 'FILE_EXTENSIONS = %s\n' "$2"
-    printf 'RENDER_COMMAND = "%s render %s"\n' "$3" "${2#.}"
-    printf 'IS_INPUT_FILE = false\n'
-    printf 'RENDER_CONTENT_MODE = %s\n' "$4"
-    printf 'NEED_POSTPROCESS = false\n'
+    fp_cfg_section "markup.$1"
+    fp_cfg_kv ENABLED true
+    fp_cfg_kv FILE_EXTENSIONS "$2"
+    fp_cfg_kv RENDER_COMMAND "$3 render ${2#.}"
+    fp_cfg_kv IS_INPUT_FILE false
+    fp_cfg_kv RENDER_CONTENT_MODE "$4"
+    fp_cfg_kv NEED_POSTPROCESS false
 }
 
 fp_emit_sanitizer() { # NAME
-    printf '\n[markup.sanitizer.%s.data-uri]\n' "$1"
-    printf 'ALLOW_DATA_URI_IMAGES = true\n'
-    printf '\n[markup.sanitizer.%s.div-class]\n' "$1"
-    printf 'ELEMENT = div\nALLOW_ATTR = class\nREGEXP = %s\n' "$FP_CLASS_RE"
+    fp_cfg_section "markup.sanitizer.$1.data_uri"
+    fp_cfg_kv ALLOW_DATA_URI_IMAGES true
+    fp_cfg_section "markup.sanitizer.$1.div_class"
+    fp_cfg_kv ELEMENT div
+    fp_cfg_kv ALLOW_ATTR class
+    fp_cfg_kv REGEXP "$FP_CLASS_RE"
     for _fp_el in div p img pre details; do
-        printf '\n[markup.sanitizer.%s.%s-style]\n' "$1" "$_fp_el"
-        printf 'ELEMENT = %s\nALLOW_ATTR = style\nREGEXP = %s\n' \
-            "$_fp_el" "$FP_STYLE_RE"
+        fp_cfg_section "markup.sanitizer.$1.${_fp_el}_style"
+        fp_cfg_kv ELEMENT "$_fp_el"
+        fp_cfg_kv ALLOW_ATTR style
+        fp_cfg_kv REGEXP "$FP_STYLE_RE"
     done
 }
 
 fp_emit_config() {
     _fp_cmdpath="$FORGEPEEK_ROOT/forgepeek"
     _fp_filter=''
+    FP_FMT=ini
     while [ $# -gt 0 ]; do
         case $1 in
             --path)
                 [ $# -ge 2 ] || { echo "forgepeek config: --path needs a value" >&2; exit 2; }
                 _fp_cmdpath="$2/forgepeek"
+                shift 2
+                ;;
+            --format)
+                [ $# -ge 2 ] || { echo "forgepeek config: --format needs ini or env" >&2; exit 2; }
+                case $2 in
+                    ini|env) FP_FMT=$2 ;;
+                    *) echo "forgepeek config: unknown format $2 (ini or env)" >&2; exit 2 ;;
+                esac
                 shift 2
                 ;;
             -*)
@@ -60,11 +110,19 @@ fp_emit_config() {
         esac
     done
 
-    printf ';; ---------------------------------------------------------------\n'
-    printf ';; forgepeek external renderers — generated by "forgepeek config"\n'
-    printf ';; Append to app.ini and restart Forgejo. Re-run after adding or\n'
-    printf ';; removing handlers. Docs: docs/INSTALL.md\n'
-    printf ';; ---------------------------------------------------------------\n'
+    if [ "$FP_FMT" = ini ]; then
+        printf ';; ---------------------------------------------------------------\n'
+        printf ';; forgepeek external renderers — generated by "forgepeek config"\n'
+        printf ';; Append to app.ini and restart Forgejo. Re-run after adding or\n'
+        printf ';; removing handlers. Docs: docs/INSTALL.md\n'
+        printf ';; ---------------------------------------------------------------\n'
+    else
+        printf '      # ------------------------------------------------------------\n'
+        printf '      # forgepeek external renderers — "forgepeek config --format env"\n'
+        printf "      # Paste into the forgejo service's 'environment:' list.\n"
+        printf '      # environment-to-ini writes these into app.ini at startup.\n'
+        printf '      # ------------------------------------------------------------\n'
+    fi
 
     for _fp_h in $(fp_handlers); do
         _fp_hname=$(basename "$_fp_h")
@@ -78,8 +136,7 @@ fp_emit_config() {
         [ "$_fp_mode" = iframe ] || _fp_mode=sanitized
         _fp_exts=$(fp_header "$_fp_h" extensions | tr ',' ' ')
         for _fp_e in $_fp_exts; do
-            _fp_name="forgepeek-${_fp_e#.}"
-            printf '\n'
+            _fp_name="forgepeek_${_fp_e#.}"
             fp_emit_stanza "$_fp_name" "$_fp_e" "$_fp_cmdpath" "$_fp_mode"
             if [ "$_fp_mode" = sanitized ]; then
                 fp_emit_sanitizer "$_fp_name"

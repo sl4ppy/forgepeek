@@ -111,7 +111,7 @@ sudo systemctl restart forgejo
 One stanza per extension (the extension must be baked into the command — Forgejo sends only file bytes, no filename):
 
 ```ini
-[markup.forgepeek-psd]
+[markup.forgepeek_psd]
 ENABLED = true
 FILE_EXTENSIONS = .psd
 RENDER_COMMAND = "/data/forgepeek/forgepeek render psd"
@@ -119,18 +119,52 @@ IS_INPUT_FILE = false          ; file arrives on stdin, no temp file
 RENDER_CONTENT_MODE = sanitized
 NEED_POSTPROCESS = false       ; don't rewrite #123/@user inside our HTML
 
-[markup.sanitizer.forgepeek-psd.data-uri]
+[markup.sanitizer.forgepeek_psd.data_uri]
 ALLOW_DATA_URI_IMAGES = true   ; THE step everyone misses — without it,
                                ; previews are silently blank
 
-[markup.sanitizer.forgepeek-psd.div-class]
+[markup.sanitizer.forgepeek_psd.div_class]
 ELEMENT = div                  ; whitelist the exact elements/attributes
 ALLOW_ATTR = class             ; forgepeek emits, value-constrained by
-REGEXP = ^forgepeek[a-z -]*$   ; REGEXP so nothing else sneaks through
+REGEXP = "^forgepeek[a-z -]*$" ; REGEXP so nothing else sneaks through
 ; ... more rules ...
 ```
 
 The 3D stanzas differ in one line — `RENDER_CONTENT_MODE = iframe` — and carry no sanitizer sections (the sanitizer doesn't apply to iframe content).
+
+## Fully declarative deployment (Komodo, Portainer, GitOps)
+
+If you can't (or don't want to) shell into the Docker host — e.g. your stacks are deployed by [Komodo](https://komo.do) from another machine — the entire install can live in the stack definition. Two ingredients:
+
+**1. A derived image carrying everything** — packages *and* the forgepeek files (`Dockerfile.example` does exactly this; override the base tag with the `FORGEJO_IMAGE` build arg). Point your stack manager's build at a clone/fork of this repo, or vendor it into your stack repo. The files land in `/usr/local/lib/forgepeek`.
+
+**2. The renderer config as environment variables.** The Forgejo image runs `environment-to-ini` at startup, which writes `FORGEJO__section__KEY` variables into `app.ini` — dots in section names encode as `_0X2E_`. Generate the complete block, ready to paste into the service's `environment:` list:
+
+```sh
+./forgepeek config --format env --path /usr/local/lib/forgepeek
+```
+
+```yaml
+services:
+  server:
+    build:
+      context: https://your.host/you/forgepeek.git   # or a local checkout
+      dockerfile: Dockerfile.example
+      args:
+        FORGEJO_IMAGE: codeberg.org/forgejo/forgejo:16
+    image: forgejo-forgepeek:16
+    environment:
+      - USER_UID=1000
+      - USER_GID=1000
+      # ... your existing vars ...
+      - 'FORGEJO__MARKUP_0X2E_FORGEPEEK_PSD__ENABLED=true'
+      # ... rest of `forgepeek config --format env` output ...
+```
+
+Notes:
+- `$` appears doubled (`$$`) in the generated regex values — that's compose interpolation escaping, required inside `environment:` lists. If you paste the variables somewhere that does **not** interpolate (a raw `.env` file used via `env_file:`), un-double them.
+- The env route is idempotent by design: values are re-applied into `app.ini` on every container start, so redeploys/recreations can never lose the config. Upgrading forgepeek = rebuild the image.
+- To verify after deploy, use your manager's container console (or logs): `forgepeek check` should print all `ok`, and the Troubleshooting table below applies unchanged (the render command path is `/usr/local/lib/forgepeek/forgepeek`).
 
 ## Verifying it worked
 

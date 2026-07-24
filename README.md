@@ -50,7 +50,7 @@ sudo ./install.sh baremetal
 sudo systemctl restart forgejo   # after appending the printed app.ini stanzas
 ```
 
-Full walk-through, verification steps and troubleshooting: **[docs/INSTALL.md](docs/INSTALL.md)**.
+Full walk-through, verification steps and troubleshooting: **[docs/INSTALL.md](docs/INSTALL.md)** — including a **fully declarative variant** (derived image + `forgepeek config --format env`) for stack managers like Komodo or Portainer where you never shell into the host.
 
 ## How it works
 
