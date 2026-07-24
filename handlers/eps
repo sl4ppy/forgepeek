@@ -1,0 +1,89 @@
+#!/bin/sh
+# forgepeek handler: PostScript graphics
+# forgepeek:extensions = .eps,.ai
+# forgepeek:mode = sanitized
+# forgepeek:deps = gs
+# forgepeek:desc = Encapsulated PostScript / Adobe Illustrator
+#
+# Renders with Ghostscript directly (-dSAFER) rather than through
+# ImageMagick: IM would only delegate to gs anyway, and IM's policy.xml
+# frequently blocks EPS. Modern .ai files are PDF-compatible and old ones
+# are EPS-compatible; gs sniffs the content and handles both. The raster
+# resolution is derived from the bounding box so the longest edge stays
+# within FORGEPEEK_MAX_EDGE pixels.
+
+set -u
+. "$FORGEPEEK_LIB/common.sh"
+
+ext=${1:-eps}
+
+fp_tmpdir || exit 0
+in="$FP_TMPDIR/input.$ext"
+out="$FP_TMPDIR/out.png"
+log="$FP_TMPDIR/stderr.log"
+
+if ! fp_slurp_stdin "$in" "$FORGEPEEK_MAX_BYTES"; then
+    fp_too_large_box "$(fp_file_size "$in")" "$FORGEPEEK_MAX_BYTES"
+    exit 0
+fi
+
+if [ ! -s "$in" ]; then
+    fp_error_box "empty file" "The file has no content to preview."
+    exit 0
+fi
+
+if ! fp_have gs; then
+    fp_missing_dep_box "$ext" "Ghostscript (the 'gs' command)"
+    exit 0
+fi
+
+# EPS files honor their %%BoundingBox via -dEPSCrop; .ai (usually PDF) uses
+# its own page box.
+crop=''
+[ "$ext" = eps ] && crop='-dEPSCrop'
+
+# Measure the artwork in points (1 pt = 1/72 inch) to pick a resolution that
+# lands the longest edge near FORGEPEEK_MAX_EDGE px, capped at 300 dpi.
+# For EPS, -dEPSCrop crops to the file's declared %%BoundingBox, so read
+# exactly that. Otherwise probe the ink extent with gs's bbox device.
+res=150
+bbox=''
+if [ "$ext" = eps ]; then
+    bbox=$(head -c 2048 "$in" | sed -n 's/^%%BoundingBox:[[:space:]]*//p' | head -n 1)
+fi
+if [ -z "$bbox" ]; then
+    bboxlog="$FP_TMPDIR/bbox.log"
+    fp_run_timeout "$bboxlog" gs -dSAFER -dBATCH -dNOPAUSE -sDEVICE=bbox \
+        $crop "$in" >/dev/null || true
+    bbox=$(sed -n 's/^%%BoundingBox:[[:space:]]*//p' "$bboxlog" | head -n 1)
+fi
+if [ -n "$bbox" ]; then
+    res=$(printf '%s\n' "$bbox" | awk -v maxpx="$FORGEPEEK_MAX_EDGE" '{
+        w = $3 - $1; h = $4 - $2; e = (w > h) ? w : h
+        if (e <= 0) { print 150; exit }
+        r = int(maxpx * 72 / e)
+        if (r > 300) r = 300
+        if (r < 4)   r = 4
+        print r
+    }')
+fi
+
+if ! fp_run_timeout "$log" gs -dSAFER -dBATCH -dNOPAUSE -sDEVICE=png16m \
+        -r"$res" $crop -dTextAlphaBits=4 -dGraphicsAlphaBits=4 \
+        -dFirstPage=1 -dLastPage=1 -o "$out" "$in" >/dev/null || [ ! -s "$out" ]; then
+    fp_error_box "could not convert this $ext file" \
+        "Ghostscript failed to read the file. It may be corrupt or use unsupported features." \
+        "$log"
+    exit 0
+fi
+
+# The dpi estimate can overshoot when the declared box and the painted area
+# disagree; if ImageMagick happens to be installed, enforce the cap exactly.
+if im=$(fp_imagemagick); then
+    fp_run_timeout "$log" "$im" "png:$out" \
+        -resize "${FORGEPEEK_MAX_EDGE}x${FORGEPEEK_MAX_EDGE}>" \
+        "png:$out.capped" && [ -s "$out.capped" ] && mv "$out.capped" "$out"
+fi
+
+fp_img_html "$out" "$ext preview (rendered by forgepeek)"
+exit 0
