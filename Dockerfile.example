@@ -12,8 +12,10 @@
 #       # ... rest of your existing forgejo service unchanged ...
 #
 # Pin the tag to the Forgejo version you run (>= 13.0.1 for the 3D viewers;
-# see docs/INSTALL.md).
-FROM codeberg.org/forgejo/forgejo:13
+# see docs/INSTALL.md). Override without editing:
+#   docker build --build-arg FORGEJO_IMAGE=codeberg.org/forgejo/forgejo:16 ...
+ARG FORGEJO_IMAGE=codeberg.org/forgejo/forgejo:13
+FROM ${FORGEJO_IMAGE}
 
 USER root
 

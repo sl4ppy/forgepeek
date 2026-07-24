@@ -53,6 +53,21 @@ services:
     # everything else unchanged
 ```
 
+**Option 1b — minimal derived image (best with stack managers like Komodo/Portainer).** If you install the forgepeek *files* onto the data volume with `install.sh docker` (step 1), the derived image only needs to supply the packages — two lines, no COPY, and upgrading forgepeek never requires a rebuild:
+
+```dockerfile
+FROM codeberg.org/forgejo/forgejo:16
+RUN apk add --no-cache imagemagick ghostscript
+```
+
+```yaml
+services:
+  server:
+    build: .                      # dir containing the 2-line Dockerfile
+    image: forgejo-forgepeek:16   # local tag for the built image
+    # rest of the service unchanged
+```
+
 **Option 2 — `docker exec` (quick, non-durable):**
 
 ```sh
