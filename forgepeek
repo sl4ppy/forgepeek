@@ -1,0 +1,165 @@
+#!/bin/sh
+# forgepeek — external renderers for Forgejo/Gitea.
+# https://github.com/ForgePeek/forgepeek  (MIT)
+#
+# Usage:
+#   forgepeek render <ext>     read file on stdin, write preview HTML to stdout
+#   forgepeek config           print app.ini stanzas for all installed handlers
+#   forgepeek check            verify handler dependencies are installed
+#   forgepeek list             list installed handlers
+#   forgepeek version
+#
+# POSIX sh (dash-compatible). Handlers live in handlers/ next to this script;
+# adding a format means dropping in one handler file — this script never
+# needs to change.
+
+set -u
+
+FORGEPEEK_VERSION="0.1.0"
+
+# ---- locate our install root (follow symlinks portably) ---------------------
+fp_resolve_root() {
+    _fp_s=$0
+    _fp_n=0
+    while [ -L "$_fp_s" ] && [ "$_fp_n" -lt 20 ]; do
+        _fp_l=$(readlink "$_fp_s") || break
+        case $_fp_l in
+            /*) _fp_s=$_fp_l ;;
+            *)  _fp_s=$(dirname -- "$_fp_s")/$_fp_l ;;
+        esac
+        _fp_n=$((_fp_n + 1))
+    done
+    CDPATH='' cd -- "$(dirname -- "$_fp_s")" && pwd -P
+}
+
+FORGEPEEK_ROOT=${FORGEPEEK_ROOT:-$(fp_resolve_root)}
+FORGEPEEK_LIB="$FORGEPEEK_ROOT/lib"
+FORGEPEEK_HANDLERS="$FORGEPEEK_ROOT/handlers"
+export FORGEPEEK_ROOT FORGEPEEK_LIB
+
+. "$FORGEPEEK_LIB/common.sh"
+
+# ---- handler header parsing -------------------------------------------------
+# Handlers declare metadata in comment headers, e.g.:
+#   # forgepeek:extensions = .psd,.psb
+#   # forgepeek:mode = sanitized        (or: iframe)
+#   # forgepeek:deps = magick|convert   (comma list; pipe separates alternatives;
+#   #                                    empty/absent means coreutils only)
+#   # forgepeek:desc = Adobe Photoshop document
+
+fp_header() { # fp_header FILE KEY
+    sed -n "s/^# forgepeek:$2[[:space:]]*=[[:space:]]*//p" "$1" | head -n 1
+}
+
+fp_handlers() { # print full paths of executable handlers, sorted
+    [ -d "$FORGEPEEK_HANDLERS" ] || return 0
+    for _fp_h in "$FORGEPEEK_HANDLERS"/*; do
+        [ -f "$_fp_h" ] && [ -x "$_fp_h" ] && printf '%s\n' "$_fp_h"
+    done
+}
+
+fp_handler_for_ext() { # fp_handler_for_ext EXT  (no leading dot, lowercase)
+    for _fp_h in $(fp_handlers); do
+        _fp_exts=$(fp_header "$_fp_h" extensions | tr 'A-Z,' 'a-z ')
+        for _fp_e in $_fp_exts; do
+            if [ "$_fp_e" = ".$1" ]; then
+                printf '%s\n' "$_fp_h"
+                return 0
+            fi
+        done
+    done
+    return 1
+}
+
+# fp_dep_ok "magick|convert" — true if any pipe-separated alternative exists
+fp_dep_ok() {
+    _fp_old_ifs=$IFS; IFS='|'
+    for _fp_alt in $1; do
+        IFS=$_fp_old_ifs
+        if command -v "$_fp_alt" >/dev/null 2>&1; then
+            return 0
+        fi
+        IFS='|'
+    done
+    IFS=$_fp_old_ifs
+    return 1
+}
+
+# ---- subcommands ------------------------------------------------------------
+cmd_render() {
+    if [ $# -lt 1 ] || [ -z "$1" ]; then
+        fp_error_box "renderer misconfigured" \
+            "forgepeek render was called without a file extension. Check the RENDER_COMMAND lines in app.ini (run 'forgepeek config' to regenerate them)."
+        exit 0
+    fi
+    _fp_ext=$(printf '%s' "$1" | sed 's/^\.//' | tr 'A-Z' 'a-z')
+    if _fp_handler=$(fp_handler_for_ext "$_fp_ext"); then
+        exec "$_fp_handler" "$_fp_ext"
+    fi
+    fp_error_box "no handler for '.$_fp_ext'" \
+        "No installed forgepeek handler claims this extension. Re-run 'forgepeek config' and update app.ini, or remove the stale [markup.*] stanza."
+    exit 0
+}
+
+cmd_list() {
+    _fp_found=0
+    for _fp_h in $(fp_handlers); do
+        _fp_found=1
+        printf '%-10s %-22s %-10s %s\n' \
+            "$(basename "$_fp_h")" \
+            "$(fp_header "$_fp_h" extensions)" \
+            "$(fp_header "$_fp_h" mode)" \
+            "$(fp_header "$_fp_h" desc)"
+    done
+    [ "$_fp_found" -eq 1 ] || echo "no handlers installed in $FORGEPEEK_HANDLERS" >&2
+}
+
+cmd_check() {
+    _fp_fail=0
+    for _fp_h in $(fp_handlers); do
+        _fp_name=$(basename "$_fp_h")
+        _fp_deps=$(fp_header "$_fp_h" deps | tr ',' ' ')
+        if [ -z "$_fp_deps" ]; then
+            printf 'ok       %-10s (no dependencies beyond coreutils)\n' "$_fp_name"
+            continue
+        fi
+        _fp_missing=''
+        for _fp_d in $_fp_deps; do
+            fp_dep_ok "$_fp_d" || _fp_missing="$_fp_missing $_fp_d"
+        done
+        if [ -z "$_fp_missing" ]; then
+            printf 'ok       %-10s (%s)\n' "$_fp_name" "$(fp_header "$_fp_h" deps)"
+        else
+            printf 'MISSING  %-10s needs:%s\n' "$_fp_name" "$_fp_missing"
+            _fp_fail=1
+        fi
+    done
+    return "$_fp_fail"
+}
+
+cmd_config() {
+    if [ ! -f "$FORGEPEEK_LIB/config.sh" ]; then
+        echo "forgepeek: config generator not installed ($FORGEPEEK_LIB/config.sh missing)" >&2
+        exit 1
+    fi
+    . "$FORGEPEEK_LIB/config.sh"
+    fp_emit_config "$@"
+}
+
+usage() {
+    sed -n '2,12p' "$0" | sed 's/^# \{0,1\}//'
+}
+
+case "${1:-}" in
+    render)  shift; cmd_render "$@" ;;
+    config)  shift; cmd_config "$@" ;;
+    check)   shift; cmd_check "$@" ;;
+    list)    shift; cmd_list "$@" ;;
+    version) printf 'forgepeek %s\n' "$FORGEPEEK_VERSION" ;;
+    ''|-h|--help|help) usage ;;
+    *)
+        printf 'forgepeek: unknown command %s\n\n' "$1" >&2
+        usage >&2
+        exit 2
+        ;;
+esac
