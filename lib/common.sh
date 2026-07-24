@@ -13,13 +13,14 @@ FORGEPEEK_TIMEOUT="${FORGEPEEK_TIMEOUT:-30}"                  # seconds
 FORGEPEEK_MAX_EDGE="${FORGEPEEK_MAX_EDGE:-2000}"              # px, longest edge
 
 # ---- temp workspace ---------------------------------------------------------
-# fp_tmpdir: create (once) and print a private temp dir, removed on exit.
+# fp_tmpdir: create a private temp dir (removed on exit) and set FP_TMPDIR.
+# Must be called directly, NOT in $(...) — the cleanup trap belongs to the
+# handler's shell, and a command substitution would run it in a subshell.
 fp_tmpdir() {
     if [ -z "${FP_TMPDIR:-}" ]; then
         FP_TMPDIR=$(mktemp -d "${TMPDIR:-/tmp}/forgepeek.XXXXXX") || return 1
         trap 'rm -rf "$FP_TMPDIR"' EXIT INT TERM
     fi
-    printf '%s\n' "$FP_TMPDIR"
 }
 
 # ---- HTML helpers -----------------------------------------------------------

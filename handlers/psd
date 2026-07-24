@@ -1,0 +1,56 @@
+#!/bin/sh
+# forgepeek handler: Adobe Photoshop documents
+# forgepeek:extensions = .psd,.psb
+# forgepeek:mode = sanitized
+# forgepeek:deps = magick|convert
+# forgepeek:desc = Adobe Photoshop document (composite or flattened layers)
+#
+# Strategy: render the embedded composite image (frame [0], present when the
+# file was saved with "Maximize Compatibility"). If that fails — files saved
+# without it have no composite — fall back to flattening the layer stack.
+# Everything is converted to sRGB so CMYK documents display correctly, and
+# the longest edge is capped at FORGEPEEK_MAX_EDGE px.
+
+set -u
+. "$FORGEPEEK_LIB/common.sh"
+
+ext=${1:-psd}
+case $ext in psb) fmt=psb ;; *) fmt=psd ;; esac
+
+fp_tmpdir || exit 0
+in="$FP_TMPDIR/input.$fmt"
+out="$FP_TMPDIR/out.png"
+log="$FP_TMPDIR/stderr.log"
+
+if ! fp_slurp_stdin "$in" "$FORGEPEEK_MAX_BYTES"; then
+    fp_too_large_box "$(fp_file_size "$in")" "$FORGEPEEK_MAX_BYTES"
+    exit 0
+fi
+
+if [ ! -s "$in" ]; then
+    fp_error_box "empty file" "The file has no content to preview."
+    exit 0
+fi
+
+if ! im=$(fp_imagemagick); then
+    fp_missing_dep_box "$ext" "ImageMagick (the 'magick' or 'convert' command)"
+    exit 0
+fi
+
+resize="${FORGEPEEK_MAX_EDGE}x${FORGEPEEK_MAX_EDGE}>"
+
+# 1st attempt: composite frame. 2nd attempt: flatten all layers.
+if ! fp_run_timeout "$log" "$im" "$fmt:$in[0]" -colorspace sRGB \
+        -resize "$resize" "png:$out" || [ ! -s "$out" ]; then
+    : >"$out"
+    if ! fp_run_timeout "$log" "$im" "$fmt:$in" -flatten -colorspace sRGB \
+            -resize "$resize" "png:$out" || [ ! -s "$out" ]; then
+        fp_error_box "could not convert this $ext file" \
+            "ImageMagick failed to read the file. It may be corrupt, use unsupported features, or PSD rights may be disabled in ImageMagick's policy.xml." \
+            "$log"
+        exit 0
+    fi
+fi
+
+fp_img_html "$out" "$ext preview (rendered by forgepeek)"
+exit 0
