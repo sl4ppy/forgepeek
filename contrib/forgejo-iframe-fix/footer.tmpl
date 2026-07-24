@@ -1,0 +1,48 @@
+<!-- forgepeek:iframe-ref-fix v1
+     Workaround for a Forgejo bug (present through v16.0.1, unfixed on main
+     as of 2026-07-24): binary files rendered by an iframe-mode external
+     renderer get an iframe src with an EMPTY ref segment
+     ("/owner/repo/render//path" instead of "/owner/repo/render/branch/main/path"),
+     which 404s and shows a gray broken box.
+     Cause: routers/web/repo/view.go builds the markup metas without
+     "BranchNameSubURL" on the binary-file path; renderIFrame() in
+     modules/markup/renderer.go reads that meta for the URL.
+     This script rebuilds the correct URL from the file view's raw/download
+     link (which is generated correctly) and re-runs the iframe height
+     handshake. Safe no-op on healthy pages. Remove once fixed upstream. -->
+<script>
+(function () {
+  function fix() {
+    var f = document.querySelector('iframe.external-render');
+    if (!f) return;
+    var src;
+    try { src = new URL(f.getAttribute('src'), window.location.href); } catch (e) { return; }
+    var i = src.pathname.indexOf('/render//');
+    if (i === -1) return;
+    var prefix = src.pathname.slice(0, i);
+    var dl = document.querySelector('a[download]');
+    if (!dl) return;
+    var raw = new URL(dl.getAttribute('href'), window.location.href).pathname;
+    var rawPrefix = prefix + '/raw/';
+    if (raw.indexOf(rawPrefix) !== 0) return;
+    f.addEventListener('load', function () {
+      var onMsg = function (ev) {
+        if (ev.source !== f.contentWindow) return;
+        var h = Number(ev.data && ev.data.frameHeight);
+        if (!h) return;
+        f.height = h;
+        f.style.overflow = 'hidden';
+        window.removeEventListener('message', onMsg);
+      };
+      window.addEventListener('message', onMsg);
+      f.contentWindow.postMessage({requestOffsetHeight: true}, '*');
+    });
+    f.src = prefix + '/render/' + raw.slice(rawPrefix.length);
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', fix);
+  } else {
+    fix();
+  }
+})();
+</script>

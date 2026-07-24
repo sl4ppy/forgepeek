@@ -190,6 +190,8 @@ docker exec -i forgejo /data/forgepeek/forgepeek render psd \
 |---|---|---|
 | Preview area is blank (no error, no image) | Sanitizer stripped the output — missing `[markup.sanitizer.*]` rules or `ALLOW_DATA_URI_IMAGES` | Re-run `forgepeek config`, replace all forgepeek stanzas in `app.ini`, restart |
 | 3D viewer area blank or zero-height | Forgejo < 13.0.1 (iframe height fix) | Upgrade Forgejo; image handlers still work meanwhile |
+| 3D viewer shows a gray box with a broken-page icon (binary `.stl`/`.fbx`); the same file renders at `…/render/branch/<branch>/<path>` directly | Forgejo bug (through v16.0.1 at least): iframe src for **binary** files is missing its ref segment (`/render//…` → 404) | Install [contrib/forgejo-iframe-fix](../contrib/forgejo-iframe-fix/) — one file in `custom/templates/`, survives upgrades |
+| 3D viewer gray broken box AND the direct `…/render/…` URL works but refuses to embed | `X-Frame-Options: DENY` served on the render page — set in `[cors] X_FRAME_OPTIONS` or injected by your reverse proxy | Set `X_FRAME_OPTIONS = SAMEORIGIN` (env: `FORGEJO__cors__X_FRAME_OPTIONS=SAMEORIGIN`), or exclude `/render/` paths from proxy header injection |
 | 3D viewer clamped to 300px | Forgejo 13.0.0 exactly (regression #9421) | Upgrade to 13.0.1+ |
 | Styled red "could not convert" box | Conversion tool failed — open the box's *tool output* details | Often ImageMagick `policy.xml` denying PSD/EPS rights (see below), or a genuinely broken file |
 | "missing dependency" box | Tool not present where Forgejo runs | `docker exec forgejo apk add --no-cache imagemagick ghostscript`, or the derived image |
