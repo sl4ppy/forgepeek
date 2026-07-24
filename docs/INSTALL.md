@@ -199,6 +199,8 @@ docker exec -i forgejo /data/forgepeek/forgepeek render psd \
 | Generic Forgejo render error | Renderer crashed before emitting HTML (shouldn't happen — please file a bug) | Check Forgejo logs; run the render command manually with the file on stdin |
 | Worked, then broke after `docker compose pull` | exec-installed packages were lost with the old container | Use the derived image ([`Dockerfile.example`](../Dockerfile.example)) — `/data/forgepeek` itself survives; only the apk packages vanish |
 | Nothing happens at all (raw/binary view) | Stanzas not loaded: wrong `app.ini` edited, Forgejo not restarted, or extension casing | Restart; check `docker exec forgejo /data/forgepeek/forgepeek list`; confirm the stanza names match |
+| File just shows a "View raw" link, no preview attempt | File exceeds **Forgejo's** `[ui] MAX_DISPLAY_FILE_SIZE` (8 MiB default) — checked before any renderer runs | Raise it, e.g. `FORGEJO__ui__MAX_DISPLAY_FILE_SIZE=67108864` (64 MiB); forgepeek's own `FORGEPEEK_MAX_BYTES*` caps still apply after |
+| A specific renderer stops matching after a restart, works after another | Two `[markup.*]` sections claim the same extension (e.g. a leftover experiment); registration order is unstable | `grep "\[markup" app.ini` and delete the stale section |
 
 ## Tuning
 
