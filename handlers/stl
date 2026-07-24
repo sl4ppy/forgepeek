@@ -1,0 +1,27 @@
+#!/bin/sh
+# forgepeek handler: STL models
+# forgepeek:extensions = .stl
+# forgepeek:mode = iframe
+# forgepeek:deps =
+# forgepeek:desc = STL 3D model (binary or ASCII), interactive viewer
+#
+# No server-side conversion: the model is base64-embedded into a
+# self-contained HTML page and parsed client-side by the inlined three.js
+# bundle, so this works even where ImageMagick/Ghostscript can't be
+# installed. Uses the larger FORGEPEEK_MAX_BYTES_3D cap; the "too large"
+# and parse-error messages are rendered by the page's own JS.
+
+set -u
+. "$FORGEPEEK_LIB/common.sh"
+. "$FORGEPEEK_LIB/3d.sh"
+
+fp_tmpdir || exit 0
+in="$FP_TMPDIR/input.stl"
+
+if ! fp_slurp_stdin "$in" "$FORGEPEEK_MAX_BYTES_3D"; then
+    fp_3d_page_too_large stl "$(fp_file_size "$in")" "$FORGEPEEK_MAX_BYTES_3D"
+    exit 0
+fi
+
+fp_3d_page stl "$in"
+exit 0

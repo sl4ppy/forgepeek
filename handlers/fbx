@@ -1,0 +1,26 @@
+#!/bin/sh
+# forgepeek handler: Autodesk FBX models
+# forgepeek:extensions = .fbx
+# forgepeek:mode = iframe
+# forgepeek:deps =
+# forgepeek:desc = FBX 3D model (binary or ASCII), interactive viewer
+#
+# Same pattern as the STL handler: base64-embed into a self-contained page,
+# parse client-side. Geometry and materials load; textures are best-effort —
+# external texture references are stubbed out (no network access in the
+# sandboxed iframe) and unusable materials fall back to a neutral one.
+
+set -u
+. "$FORGEPEEK_LIB/common.sh"
+. "$FORGEPEEK_LIB/3d.sh"
+
+fp_tmpdir || exit 0
+in="$FP_TMPDIR/input.fbx"
+
+if ! fp_slurp_stdin "$in" "$FORGEPEEK_MAX_BYTES_3D"; then
+    fp_3d_page_too_large fbx "$(fp_file_size "$in")" "$FORGEPEEK_MAX_BYTES_3D"
+    exit 0
+fi
+
+fp_3d_page fbx "$in"
+exit 0

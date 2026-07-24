@@ -1,0 +1,30 @@
+solid forgepeek_ascii_fixture
+  facet normal 0.000000e+00 0.000000e+00 -1.000000e+00
+    outer loop
+      vertex 0.000000e+00 0.000000e+00 0.000000e+00
+      vertex 1.000000e+00 2.000000e+00 0.000000e+00
+      vertex 2.000000e+00 0.000000e+00 0.000000e+00
+    endloop
+  endfacet
+  facet normal 0.000000e+00 -8.944272e-01 4.472136e-01
+    outer loop
+      vertex 0.000000e+00 0.000000e+00 0.000000e+00
+      vertex 2.000000e+00 0.000000e+00 0.000000e+00
+      vertex 1.000000e+00 1.000000e+00 2.000000e+00
+    endloop
+  endfacet
+  facet normal 8.728716e-01 4.364358e-01 2.182179e-01
+    outer loop
+      vertex 2.000000e+00 0.000000e+00 0.000000e+00
+      vertex 1.000000e+00 2.000000e+00 0.000000e+00
+      vertex 1.000000e+00 1.000000e+00 2.000000e+00
+    endloop
+  endfacet
+  facet normal -8.728716e-01 4.364358e-01 2.182179e-01
+    outer loop
+      vertex 1.000000e+00 2.000000e+00 0.000000e+00
+      vertex 0.000000e+00 0.000000e+00 0.000000e+00
+      vertex 1.000000e+00 1.000000e+00 2.000000e+00
+    endloop
+  endfacet
+endsolid forgepeek_ascii_fixture

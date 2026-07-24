@@ -1,0 +1,13 @@
+{
+  "name": "forgepeek-viewer",
+  "private": true,
+  "description": "Build the self-contained three.js viewer bundle inlined by the 3D handlers. Dev-time only; the built lib/viewer.js is committed so installation never needs Node.",
+  "scripts": {
+    "build": "sh build.sh"
+  },
+  "devDependencies": {
+    "esbuild": "0.24.2",
+    "fflate": "0.8.2",
+    "three": "0.170.0"
+  }
+}

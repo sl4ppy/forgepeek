@@ -1,0 +1,57 @@
+; FBX 7.4.0 project file
+; forgepeek test fixture: 2x2x2 cube, no materials, no textures
+
+FBXHeaderExtension:  {
+	FBXHeaderVersion: 1003
+	FBXVersion: 7400
+	Creator: "forgepeek fixture generator"
+}
+GlobalSettings:  {
+	Version: 1000
+	Properties70:  {
+		P: "UpAxis", "int", "Integer", "",1
+		P: "UpAxisSign", "int", "Integer", "",1
+		P: "FrontAxis", "int", "Integer", "",2
+		P: "FrontAxisSign", "int", "Integer", "",1
+		P: "CoordAxis", "int", "Integer", "",0
+		P: "CoordAxisSign", "int", "Integer", "",1
+		P: "UnitScaleFactor", "double", "Number", "",1
+	}
+}
+Definitions:  {
+	Version: 100
+	Count: 2
+	ObjectType: "Geometry" {
+		Count: 1
+	}
+	ObjectType: "Model" {
+		Count: 1
+	}
+}
+Objects:  {
+	Geometry: 1000000, "Geometry::cube", "Mesh" {
+		Vertices: *24 {
+			a: -1,-1,-1,1,-1,-1,1,1,-1,-1,1,-1,-1,-1,1,1,-1,1,1,1,1,-1,1,1
+		}
+		PolygonVertexIndex: *36 {
+			a: 0,3,-3,0,2,-2,4,5,-7,4,6,-8,0,1,-6,0,5,-5,2,3,-8,2,7,-7,1,2,-7,1,6,-6,3,0,-5,3,4,-8
+		}
+		GeometryVersion: 124
+	}
+	Model: 2000000, "Model::cube", "Mesh" {
+		Version: 232
+		Properties70:  {
+			P: "Lcl Translation", "Lcl Translation", "", "A",0,0,0
+			P: "Lcl Rotation", "Lcl Rotation", "", "A",0,0,0
+			P: "Lcl Scaling", "Lcl Scaling", "", "A",1,1,1
+		}
+		Shading: T
+		Culling: "CullingOff"
+	}
+}
+Connections:  {
+	;Model::cube, Model::RootNode
+	C: "OO",2000000,0
+	;Geometry::cube, Model::cube
+	C: "OO",1000000,2000000
+}
