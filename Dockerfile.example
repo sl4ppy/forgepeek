@@ -1,0 +1,33 @@
+# Derived Forgejo image with forgepeek and its conversion tools baked in.
+# This is the durable alternative to `docker exec apk add ...`, which is
+# lost every time the container is recreated (e.g. `docker compose pull`).
+#
+# Build & use with docker compose:
+#
+#   services:
+#     forgejo:
+#       build:
+#         context: ./forgepeek        # a checkout of this repo
+#         dockerfile: Dockerfile.example
+#       # ... rest of your existing forgejo service unchanged ...
+#
+# Pin the tag to the Forgejo version you run (>= 13.0.1 for the 3D viewers;
+# see docs/INSTALL.md).
+FROM codeberg.org/forgejo/forgejo:13
+
+USER root
+
+# ImageMagick for .psd/.psb, Ghostscript for .eps/.ai.
+# The .stl/.fbx handlers need nothing beyond the shell and coreutils.
+RUN apk add --no-cache imagemagick ghostscript
+
+# Bake forgepeek into the image (NOT under /data: that's the volume, which
+# would shadow image content). RENDER_COMMAND in app.ini must then use
+# /usr/local/lib/forgepeek — generate the stanzas with:
+#   ./forgepeek config --path /usr/local/lib/forgepeek
+COPY forgepeek /usr/local/lib/forgepeek/forgepeek
+COPY handlers/ /usr/local/lib/forgepeek/handlers/
+COPY lib/      /usr/local/lib/forgepeek/lib/
+RUN chmod 755 /usr/local/lib/forgepeek/forgepeek /usr/local/lib/forgepeek/handlers/* \
+    && ln -sf /usr/local/lib/forgepeek/forgepeek /usr/local/bin/forgepeek \
+    && /usr/local/bin/forgepeek check
