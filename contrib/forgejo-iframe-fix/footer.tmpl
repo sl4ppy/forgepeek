@@ -1,4 +1,4 @@
-<!-- forgepeek:iframe-ref-fix v4
+<!-- forgepeek:iframe-ref-fix v5
      Two roles:
      A. Progressive enhancement: zoom/pan controls for forgepeek's
         sanitized-mode image previews (.psd/.eps/.ai). Sanitized output
@@ -93,6 +93,15 @@
     box.style.position = 'relative';
     box.style.overflow = 'hidden';
     box.style.touchAction = 'none';
+    // Give the preview a real stage (matching the 3D viewer's height) so
+    // there is room to work when zooming, instead of a strip the height of
+    // the image's natural size.
+    box.style.height = '70vh';
+    box.style.minHeight = '480px';
+    box.style.display = 'flex';
+    box.style.alignItems = 'center';
+    box.style.justifyContent = 'center';
+    img.style.maxHeight = '100%';
     img.style.transformOrigin = '0 0';
     img.draggable = false;
 
